@@ -160,11 +160,14 @@ def minimax(board, depth, alpha, beta, maximizing_player):
         return min_eval, best_move
 
 
-# Display board in terminal
+# Display board in terminal with separators
 def display_board(board):
+    print("=" * 20)  # Separator line
     for row in board.board:
         print(" ".join([str(piece) if piece else "." for piece in row]))
-    print()
+    print("=" * 20)  # Another separator line
+    print()  # Blank line for better readability
+
 
 
 def main():
