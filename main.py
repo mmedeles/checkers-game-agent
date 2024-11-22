@@ -193,71 +193,13 @@ def minimax(board, depth, alpha, beta, maximizing_player):
 
 
 def display_board(board):
-    """Displays the game board."""
-    print("=" * 20)
-    for row in board.board:
-        print(" ".join([str(piece) if piece else "." for piece in row]))
-    print("=" * 20)
-    print()
-
-
-def play_ai_vs_ai(board):
-    """Plays a game between two AI agents."""
-    player_turn = WHITE
-    depth = 3
-    while not board.is_terminal():
-        display_board(board)
-        _, best_move = minimax(board, depth, float('-inf'), float('inf'), player_turn == WHITE)
-        if best_move:
-            piece, start, end = best_move
-            skipped = board.get_valid_moves(piece, *start)[end]
-            board.move_piece(piece, start, end)
-            board.remove_piece(skipped)
-        player_turn = BLACK if player_turn == WHITE else WHITE
-    print("Game Over! Winner:", "WHITE" if board.white_left > board.black_left else "BLACK")
-
-
-def play_human_vs_ai(board):
-    """Allows a human player to play against an AI agent."""
-    player_turn = WHITE
-    depth = 3
-    while not board.is_terminal():
-        display_board(board)
-        if player_turn == WHITE:
-            # Human's turn
-            print("Your turn (WHITE).")
-            try:
-                row, col = map(int, input("Enter row and col of piece to move (e.g., 5 0): ").split())
-                piece = board.get_piece(row, col)
-                if piece and piece.color == WHITE:
-                    moves = board.get_valid_moves(piece, row, col)
-                    print("Valid moves:", moves)
-                    end_row, end_col = map(int, input("Enter row and col to move to: ").split())
-                    if (end_row, end_col) in moves:
-                        skipped = moves[(end_row, end_col)]
-                        board.move_piece(piece, (row, col), (end_row, end_col))
-                        board.remove_piece(skipped)
-                    else:
-                        print("Invalid move. Try again.")
-                        continue
-                else:
-                    print("Invalid piece. Try again.")
-                    continue
-            except ValueError:
-                print("Invalid input. Try again.")
-                continue
-        else:
-            # AI's turn
-            _, best_move = minimax(board, depth, float('-inf'), float('inf'), False)
-            if best_move:
-                piece, start, end = best_move
-                skipped = board.get_valid_moves(piece, *start)[end]
-                board.move_piece(piece, start, end)
-                board.remove_piece(skipped)
-                print("AI moves from", start, "to", end)
-
-        player_turn = BLACK if player_turn == WHITE else WHITE
-    print("Game Over! Winner:", "WHITE" if board.white_left > board.black_left else "BLACK")
+    """Displays the game board with row and column numbers."""
+    print("    " + " ".join(map(str, range(COLS))))  # Print column numbers
+    print("  " + "=" * (COLS * 2 - 1))  # Separator line
+    for row in range(ROWS):
+        row_pieces = " ".join([str(piece) if piece else "." for piece in board.board[row]])
+        print(f"{row} | {row_pieces}")  # Print row number and pieces
+    print("  " + "=" * (COLS * 2 - 1))  # Separator line
 
 
 def play_human_vs_human(board):
@@ -268,25 +210,38 @@ def play_human_vs_human(board):
         print("Player turn:", "WHITE" if player_turn == WHITE else "BLACK")
         try:
             row, col = map(int, input("Enter row and col of piece to move: ").split())
-            piece = board.get_piece(row, col)
-            if piece and piece.color == player_turn:
-                moves = board.get_valid_moves(piece, row, col)
-                print("Valid moves:", moves)
-                end_row, end_col = map(int, input("Enter row and col to move to: ").split())
-                if (end_row, end_col) in moves:
-                    skipped = moves[(end_row, end_col)]
-                    board.move_piece(piece, (row, col), (end_row, end_col))
-                    board.remove_piece(skipped)
-                else:
-                    print("Invalid move. Try again.")
-                    continue
-            else:
-                print("Invalid piece. Try again.")
+            if not (0 <= row < ROWS and 0 <= col < COLS):
+                print("Input out of range. Rows and columns must be between 0 and 7. Try again.")
                 continue
+
+            piece = board.get_piece(row, col)
+            if piece is None:
+                print("No piece found at that position. Try again.")
+                continue
+            elif piece.color != player_turn:
+                print(f"That piece belongs to {piece.color.upper()}, not your turn. Try again.")
+                continue
+
+            moves = board.get_valid_moves(piece, row, col)
+            if not moves:
+                print("No valid moves for this piece. Try another piece.")
+                continue
+
+            print("Valid moves:", moves)
+            end_row, end_col = map(int, input("Enter row and col to move to: ").split())
+            if (end_row, end_col) not in moves:
+                print("Invalid move. Try again.")
+                continue
+
+            skipped = moves[(end_row, end_col)]
+            board.move_piece(piece, (row, col), (end_row, end_col))
+            board.remove_piece(skipped)
         except ValueError:
             print("Invalid input. Try again.")
             continue
+
         player_turn = BLACK if player_turn == WHITE else WHITE
+
     print("Game Over! Winner:", "WHITE" if board.white_left > board.black_left else "BLACK")
 
 
@@ -302,14 +257,10 @@ def main():
     print("Initial Board:")
     display_board(board)
 
-    if mode == 1:
-        play_ai_vs_ai(board)
-    elif mode == 2:
-        play_human_vs_ai(board)
-    elif mode == 3:
+    if mode == 3:
         play_human_vs_human(board)
     else:
-        print("Invalid choice. Exiting.")
+        print("This mode is currently under development!")
 
 
 if __name__ == "__main__":
