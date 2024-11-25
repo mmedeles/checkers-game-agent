@@ -1,267 +1,282 @@
-# This Python program implements a simplified Checkers game agent using Minimax with alpha-beta pruning.
-# It allows two AI agents (one representing "white" and the other "black") to play against each other on an 8x8 board.
-# The program follows the basic rules of Checkers, including piece movement, capturing, and promotion to "king" status.
-# The game will run until one player has no pieces left or no available moves.
-#
-# Usage:
-# - Run the program to see the game play out between two AI players.
-# - The game displays the board after each move, with "=" separators for clarity.
-# - At the end of the game, the winner is announced, either because one player has captured all pieces or no moves are available.
+import math
 
-import copy
-import random
+# Constants for player pieces
+WHITE = 'W'
+BLACK = 'B'
+EMPTY = '.'
+MAX_DEPTH = 4
 
-# Constants
-WHITE = "white"
-BLACK = "black"
-EMPTY = None
-ROWS, COLS = 8, 8
+def apply_move(board, start_row, start_col, end_row, end_col, player):
+    """Apply a move to the board."""
+    board[start_row][start_col] = EMPTY
+    board[end_row][end_col] = player
+    return board
 
+def get_possible_moves(board, player):
+    """Get all possible moves for the player."""
+    moves = []
+    for row in range(8):
+        for col in range(8):
+            if board[row][col] == player:
+                for d_row, d_col in [(-1, -1), (-1, 1)] if player == WHITE else [(1, -1), (1, 1)]:
+                    new_row, new_col = row + d_row, col + d_col
+                    if 0 <= new_row < 8 and 0 <= new_col < 8 and board[new_row][new_col] == EMPTY:
+                        moves.append(((row, col), (new_row, new_col)))  # Save as tuples of (start, end)
+    return moves
 
-class Piece:
-    """A class representing a checkers piece, including king status."""
-    def __init__(self, color, king=False):
-        self.color = color
-        self.king = king
+def minimax(board, depth, alpha, beta, maximizing, player):
+    """Minimax algorithm with alpha-beta pruning."""
+    if depth == 0 or is_game_over(board):
+        return evaluate_board_using_heuristics(board, player), None
 
-    def make_king(self):
-        """Promotes the piece to a king."""
-        self.king = True
-
-    def __repr__(self):
-        return "K" if self.king else self.color[0].upper()
-
-
-class Board:
-    """A class to represent and manage the checkers game board."""
-    def __init__(self):
-        self.board = self.create_board()
-        self.white_left = self.black_left = 12
-        self.white_kings = self.black_kings = 0
-
-    def create_board(self):
-        """Sets up the initial board."""
-        board = [[EMPTY] * COLS for _ in range(ROWS)]
-        for row in range(3):
-            for col in range(row % 2, COLS, 2):
-                board[row][col] = Piece(BLACK)
-        for row in range(5, ROWS):
-            for col in range(row % 2, COLS, 2):
-                board[row][col] = Piece(WHITE)
-        return board
-
-    def move_piece(self, piece, start, end):
-        """Moves a piece and handles king promotion."""
-        start_row, start_col = start
-        end_row, end_col = end
-        self.board[start_row][start_col] = EMPTY
-        self.board[end_row][end_col] = piece
-
-        if end_row == ROWS - 1 and piece.color == WHITE:
-            piece.make_king()
-            self.white_kings += 1
-        elif end_row == 0 and piece.color == BLACK:
-            piece.make_king()
-            self.black_kings += 1
-
-    def remove_piece(self, pieces):
-        """Removes captured pieces."""
-        for piece in pieces:
-            row, col = piece
-            removed_piece = self.board[row][col]
-            if removed_piece:
-                if removed_piece.color == WHITE:
-                    self.white_left -= 1
-                    if removed_piece.king:
-                        self.white_kings -= 1
-                else:
-                    self.black_left -= 1
-                    if removed_piece.king:
-                        self.black_kings -= 1
-                self.board[row][col] = EMPTY
-
-    def get_piece(self, row, col):
-        """Returns the piece at a given location."""
-        return self.board[row][col]
-
-    def get_all_pieces(self, color):
-        """Returns all pieces of a specific color."""
-        pieces = []
-        for row in range(ROWS):
-            for col in range(COLS):
-                piece = self.get_piece(row, col)
-                if piece and piece.color == color:
-                    pieces.append((piece, row, col))
-        return pieces
-
-    def get_valid_moves(self, piece, row, col):
-        """Returns valid moves for a piece."""
-        moves = {}
-        if piece.color == WHITE or piece.king:
-            moves.update(self._traverse(row, col, -1, -1, piece.color, [], 1))
-            moves.update(self._traverse(row, col, -1, 1, piece.color, [], 1))
-        if piece.color == BLACK or piece.king:
-            moves.update(self._traverse(row, col, 1, -1, piece.color, [], 1))
-            moves.update(self._traverse(row, col, 1, 1, piece.color, [], 1))
-        return moves
-
-    def _traverse(self, start_row, start_col, row_inc, col_inc, color, skipped, depth):
-        """Helper function to explore moves in a specific direction."""
-        moves = {}
-        row, col = start_row + row_inc, start_col + col_inc
-        if 0 <= row < ROWS and 0 <= col < COLS:
-            next_piece = self.get_piece(row, col)
-            if next_piece == EMPTY:
-                moves[(row, col)] = skipped
-            elif next_piece.color != color:
-                new_row, new_col = row + row_inc, col + col_inc
-                if 0 <= new_row < ROWS and 0 <= new_col < COLS and self.get_piece(new_row, new_col) == EMPTY:
-                    moves[(new_row, new_col)] = skipped + [(row, col)]
-        return moves
-
-    def evaluate(self):
-        """Uses an enhanced heuristic to evaluate the board state."""
-        return enhanced_heuristic(self)
-
-    def is_terminal(self):
-        """Checks if the game has ended."""
-        return self.white_left == 0 or self.black_left == 0
-
-    def clone(self):
-        """Creates a deep copy of the board."""
-        return copy.deepcopy(self)
-
-
-def enhanced_heuristic(board):
-    """Enhanced heuristic evaluation function."""
-    white_score = 0
-    black_score = 0
-
-    for row in range(ROWS):
-        for col in range(COLS):
-            piece = board.get_piece(row, col)
-            if piece:
-                base_score = 3 if piece.king else 1
-                position_score = 0.5 if 2 <= row <= 5 and 2 <= col <= 5 else 0
-                total_score = base_score + position_score
-                if piece.color == WHITE:
-                    white_score += total_score
-                else:
-                    black_score += total_score
-
-    return white_score - black_score
-
-
-def minimax(board, depth, alpha, beta, maximizing_player):
-    """Implements the minimax algorithm with alpha-beta pruning."""
-    if depth == 0 or board.is_terminal():
-        return board.evaluate(), None
-
-    best_move = None
-    if maximizing_player:
-        max_eval = float('-inf')
-        for piece, row, col in board.get_all_pieces(WHITE):
-            moves = board.get_valid_moves(piece, row, col)
-            for move, skipped in moves.items():
-                new_board = board.clone()
-                new_board.move_piece(piece, (row, col), move)
-                new_board.remove_piece(skipped)
-                evaluation, _ = minimax(new_board, depth - 1, alpha, beta, False)
-                if evaluation > max_eval:
-                    max_eval = evaluation
-                    best_move = (piece, (row, col), move)
-                alpha = max(alpha, evaluation)
-                if beta <= alpha:
-                    break
-        return max_eval, best_move
+    if maximizing:
+        max_score = -math.inf
+        best_move = None
+        for move in get_possible_moves(board, player):
+            start, end = move
+            temp_board = [row[:] for row in board]  # Create a copy of the board
+            temp_board = apply_move(temp_board, start[0], start[1], end[0], end[1], player)
+            current_score, _ = minimax(temp_board, depth - 1, alpha, beta, False, WHITE if player == BLACK else BLACK)
+            if current_score > max_score:
+                max_score = current_score
+                best_move = move
+            alpha = max(alpha, current_score)
+            if beta <= alpha:
+                break
+        return max_score, best_move
     else:
-        min_eval = float('inf')
-        for piece, row, col in board.get_all_pieces(BLACK):
-            moves = board.get_valid_moves(piece, row, col)
-            for move, skipped in moves.items():
-                new_board = board.clone()
-                new_board.move_piece(piece, (row, col), move)
-                new_board.remove_piece(skipped)
-                evaluation, _ = minimax(new_board, depth - 1, alpha, beta, True)
-                if evaluation < min_eval:
-                    min_eval = evaluation
-                    best_move = (piece, (row, col), move)
-                beta = min(beta, evaluation)
-                if beta <= alpha:
-                    break
+        min_eval = math.inf
+        best_move = None
+        for move in get_possible_moves(board, player):
+            start, end = move
+            temp_board = [row[:] for row in board]  # Create a copy of the board
+            temp_board = apply_move(temp_board, start[0], start[1], end[0], end[1], player)
+            current_score, _ = minimax(temp_board, depth - 1, alpha, beta, True, WHITE if player == BLACK else BLACK)
+            if current_score < min_eval:
+                min_eval = current_score
+                best_move = move
+            beta = min(beta, current_score)
+            if beta <= alpha:
+                break
         return min_eval, best_move
 
+def evaluate_board_using_heuristics(board, player):
+    """
+    Evaluate the board for a checkers game, considering base score, position score, and piece types (regular or king).
+    """
+    
+    # Score constants
+    BASE_SCORE = 1
+    KING_SCORE = 3
+    POSITION_BONUS = 0.5
+    
+    def get_position_bonus(row, col):
+        """Returns a position bonus if the piece is near the center."""
+        if 1 <= row <= 4 and 1 <= col <= 4:  # Rows 2-5 and columns 2-5
+            return POSITION_BONUS
+        return 0
+    
+    # Calculate score for the player and the opponent
+    player_score = 0
+    opponent_score = 0
+    
+    for row_index, row in enumerate(board):
+        for col_index, cell in enumerate(row):
+            if cell == player or cell == (player + "_KING"):
+                # Base score + Position bonus (if piece is in central region)
+                piece_score = BASE_SCORE
+                if 'KING' in cell:
+                    piece_score = KING_SCORE
+                piece_score += get_position_bonus(row_index, col_index)
+                player_score += piece_score
+            elif cell == (WHITE if player == 'BLACK' else 'BLACK') or cell == (WHITE if player == 'BLACK' else 'BLACK' + "_KING"):
+                # Opponent's piece (either regular or king)
+                piece_score = BASE_SCORE
+                if 'KING' in cell:
+                    piece_score = KING_SCORE
+                piece_score += get_position_bonus(row_index, col_index)
+                opponent_score += piece_score
+    
+    # Return the difference: Positive means the player is winning, negative means the opponent is
+    return player_score - opponent_score
 
-def display_board(board):
-    """Displays the game board with row and column numbers."""
-    print("    " + " ".join(map(str, range(COLS))))  # Print column numbers
-    print("  " + "=" * (COLS * 2 - 1))  # Separator line
-    for row in range(ROWS):
-        row_pieces = " ".join([str(piece) if piece else "." for piece in board.board[row]])
-        print(f"{row} | {row_pieces}")  # Print row number and pieces
-    print("  " + "=" * (COLS * 2 - 1))  # Separator line
+def suggest_next_move(board, player):
+    """Suggest the best move for the current player."""
+    best_score = -math.inf if player == WHITE else math.inf
+    best_move = None
 
+    for move in get_possible_moves(board, player):
+        start, end = move
+        temp_board = [row[:] for row in board]  # Create a copy of the board
+        temp_board = apply_move(temp_board, start[0], start[1], end[0], end[1], player)
+        score, _ = minimax(temp_board, MAX_DEPTH, -math.inf, math.inf, player == WHITE, WHITE if player == BLACK else BLACK)
+        
+        if (player == WHITE and score > best_score) or (player == BLACK and score < best_score):
+            best_score = score
+            best_move = move
 
-def play_human_vs_human(board):
-    """Allows two human players to play against each other."""
-    player_turn = WHITE
-    while not board.is_terminal():
-        display_board(board)
-        print("Player turn:", "WHITE" if player_turn == WHITE else "BLACK")
-        try:
-            row, col = map(int, input("Enter row and col of piece to move: ").split())
-            if not (0 <= row < ROWS and 0 <= col < COLS):
-                print("Input out of range. Rows and columns must be between 0 and 7. Try again.")
-                continue
+    return best_move
 
-            piece = board.get_piece(row, col)
-            if piece is None:
-                print("No piece found at that position. Try again.")
-                continue
-            elif piece.color != player_turn:
-                print(f"That piece belongs to {piece.color.upper()}, not your turn. Try again.")
-                continue
+def print_board(board):
+    """Print the board in a readable format."""
+    print("  0 1 2 3 4 5 6 7")
+    for row in range(8):
+        print(f"{row} {' '.join(board[row])}")
 
-            moves = board.get_valid_moves(piece, row, col)
-            if not moves:
-                print("No valid moves for this piece. Try another piece.")
-                continue
+def is_game_over(board):
+    """Check if the game is over (no more moves)."""
+    return not any(EMPTY in row for row in board)
 
-            print("Valid moves:", moves)
-            end_row, end_col = map(int, input("Enter row and col to move to: ").split())
-            if (end_row, end_col) not in moves:
-                print("Invalid move. Try again.")
-                continue
+def find_move_coordinates(old_board, new_board, player):
+    """Finds the coordinates of the move from old board to new board"""
+    start, end = None, None
+    for row in range(8):
+        for col in range(8):
+            if old_board[row][col] == player and new_board[row][col] == EMPTY:
+                start = (row, col)
+            if old_board[row][col] == EMPTY and new_board[row][col] == player:
+                end = (row, col)
+    return start, end
+    
+def is_game_over(board):
+    """Check if the game is over (no more moves for one player or one player has no pieces)."""
+    white_pieces = sum(row.count(WHITE) for row in board)
+    black_pieces = sum(row.count(BLACK) for row in board)
 
-            skipped = moves[(end_row, end_col)]
-            board.move_piece(piece, (row, col), (end_row, end_col))
-            board.remove_piece(skipped)
-        except ValueError:
-            print("Invalid input. Try again.")
-            continue
+    # If a player has no pieces left, the game is over
+    if white_pieces == 0 or black_pieces == 0:
+        return True
 
-        player_turn = BLACK if player_turn == WHITE else WHITE
+    # Check if any player has no valid moves left
+    for player in [WHITE, BLACK]:
+        if not get_possible_moves(board, player):
+            return True  # No valid moves left for the current player
 
-    print("Game Over! Winner:", "WHITE" if board.white_left > board.black_left else "BLACK")
+    return False
 
+def simulate_game():
+    """Simulate the full game between two computer players."""
+    board = [
+        [EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK],
+        [BLACK, EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK, EMPTY],
+        [EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK],
+        [EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY],
+        [EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY],
+        [WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY],
+        [EMPTY, WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY, WHITE],
+        [WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY],
+    ]
+
+    print_board(board)
+
+    while not is_game_over(board):
+        # White (maximizing) turn
+        print("\nWhite's turn...")
+        suggested_move_white = suggest_next_move(board, WHITE)
+        if suggested_move_white:
+            start, end = suggested_move_white
+            print(f"\nWhite moves from {start} to {end}\n")
+            board = apply_move(board, start[0], start[1], end[0], end[1], WHITE)
+
+        print_board(board)
+
+        if is_game_over(board):
+            print("\n****Game Over! White wins!****\n")
+            break
+
+        # Black (minimizing) turn
+        print("\nBlack's turn...")
+        suggested_move_black = suggest_next_move(board, BLACK)
+        if suggested_move_black:
+            start, end = suggested_move_black
+            print(f"\nBlack moves from {start} to {end}\n")
+            board = apply_move(board, start[0], start[1], end[0], end[1], BLACK)
+
+        print_board(board)
+
+        if is_game_over(board):
+            print("\n****Game Over! Black wins!****\n")
+            break
+
+def is_valid_move(board, start_row, start_col, end_row, end_col, player):
+    """
+    Check if the move is valid based on the board state and player.
+    """
+    possible_moves = get_possible_moves(board, player)
+    return ((start_row, start_col), (end_row, end_col)) in possible_moves
+
+def human_vs_computer():
+    """Human vs Computer game mode."""
+    board = [
+        [EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK],
+        [BLACK, EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK, EMPTY],
+        [EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK, EMPTY, BLACK],
+        [EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY],
+        [EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY],
+        [WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY],
+        [EMPTY, WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY, WHITE],
+        [WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY, WHITE, EMPTY],
+    ]
+
+    print_board(board)
+
+    while not is_game_over(board):
+        # Human (white) turn
+        print("\nWhite's (human) turn...")
+        valid_move = False
+        while not valid_move:
+            try:
+                move = input("Enter your move (e.g., 5 0 4 1): ").split()
+                if len(move) != 4:
+                    raise ValueError("Input must contain exactly 4 numbers.")
+
+                start_row, start_col, end_row, end_col = map(int, move)
+
+                # Check if the move is valid
+                if is_valid_move(board, start_row, start_col, end_row, end_col, WHITE):
+                    valid_move = True
+                else:
+                    print("Invalid move. Please try again.")
+            except ValueError as e:
+                print(f"Invalid input: {e}. Please enter in the format 'start_row start_col end_row end_col'.")
+
+        # Apply the move for the human player
+        board = apply_move(board, start_row, start_col, end_row, end_col, WHITE)
+
+        print_board(board)
+
+        if is_game_over(board):
+            print("\n****Game Over! White wins!****\n")
+            break
+
+        # Computer (black) turn
+        print("\nBlack's turn (computer)...")
+        suggested_move_black = suggest_next_move(board, BLACK)
+        if suggested_move_black:
+            start, end = suggested_move_black
+            print(f"Black moves from {start} to {end}")
+            board = apply_move(board, start[0], start[1], end[0], end[1], BLACK)
+
+        print_board(board)
+
+        if is_game_over(board):
+            print("\n****Game Over! Black wins!****\n")
+            break
 
 def main():
-    """Main game loop."""
+    print("Welcome to Checkers! \n")
+    
     print("Choose game mode:")
-    print("1. AI vs AI")
-    print("2. Human vs AI")
-    print("3. Human vs Human")
-    mode = int(input("Enter choice (1/2/3): "))
+    print("1. Human vs Computer")
+    print("2. Game simulation")
+    mode = int(input("Enter choice (1/2): "))
 
-    board = Board()
-    print("Initial Board:")
-    display_board(board)
-
-    if mode == 3:
-        play_human_vs_human(board)
+    if mode == 1:
+        human_vs_computer()
+    elif mode == 2:
+        simulate_game()
     else:
-        print("This mode is currently under development!")
-
-
+        print("Invalid choice. Please select either 1 or 2.")
+    
 if __name__ == "__main__":
     main()
